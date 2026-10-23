@@ -1,0 +1,45 @@
+# Publishes a Windows build of the Sonic Weaver Screensaver as a release, one tap from the Actions tab.
+#
+# The build is made from the site's desktop/ source (sonicweaver.com) and pushed to a release branch in parts under
+# GitHub's 100 MB file limit, with its notes and its SHA-256 (release/). This workflow, run by the owner (Actions,
+# Publish release, Run workflow), rebuilds the zip from its parts, checks the SHA-256, publishes the release as the latest
+# one with the zip attached, and deletes the release branch so the repository keeps only the README.
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The release branch holding the build"
+        required: true
+        default: "release-0.1.1"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Rebuild the zip from its parts and check its SHA-256
+        run: |
+          set -euo pipefail
+          . release/release.env
+          cat release/parts/"$ZIP".part-* > "$ZIP"
+          echo "$SHA256  $ZIP" | sha256sum --check --strict -
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          . release/release.env
+          gh release create "v$VERSION" "$ZIP" --repo "$GITHUB_REPOSITORY" --title "Sonic Weaver Screensaver $VERSION" --notes-file release/notes.md --target main --latest
+
+      - name: Delete the release branch
+        run: git push origin --delete "${{ inputs.branch }}"
